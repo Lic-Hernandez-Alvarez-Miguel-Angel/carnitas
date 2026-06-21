@@ -9,7 +9,9 @@ import {
 import Menu from "../components/Menu";
 import ScreenWrapper from "../components/ScreenWrapper";
 
-export default function JefeView({ navigation }) {
+export default function JefeView({ navigation, route }) {
+  const usuario = route?.params?.usuario || null;
+
   const cerrarSesion = () => {
     Alert.alert("Cerrar sesión", "¿Deseas regresar al inicio de sesión?", [
       {
@@ -49,9 +51,13 @@ export default function JefeView({ navigation }) {
         <Text style={styles.summaryText}>
           Bienvenido al centro de control del negocio.
         </Text>
+
+        {usuario?.nombre ? (
+          <Text style={styles.userText}>Sesión: {usuario.nombre}</Text>
+        ) : null}
       </View>
 
-      <Menu navigation={navigation} rol="jefe" />
+      <Menu navigation={navigation} rol="jefe" usuario={usuario} />
     </ScreenWrapper>
   );
 }
@@ -63,15 +69,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8EFD8",
     flexGrow: 1,
   },
+
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 20,
   },
+
   header: {
     marginBottom: 20,
   },
+
   badge: {
     alignSelf: "flex-start",
     backgroundColor: "#FCE3B4",
@@ -82,28 +91,33 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
   },
+
   logoutButton: {
     backgroundColor: "#8B0000",
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 14,
   },
+
   logoutButtonText: {
     color: "#fff",
     fontWeight: "800",
     fontSize: 14,
   },
+
   title: {
     fontSize: 34,
     fontWeight: "800",
     color: "#4A1F0F",
     marginBottom: 8,
   },
+
   subtitle: {
     fontSize: 15,
     color: "#7A6A59",
     lineHeight: 22,
   },
+
   summaryCard: {
     backgroundColor: "#C0392B",
     borderRadius: 24,
@@ -118,15 +132,24 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
+
   summaryTitle: {
     color: "#FFF5E1",
     fontSize: 22,
     fontWeight: "800",
     marginBottom: 8,
   },
+
   summaryText: {
     color: "#FFE7D6",
     fontSize: 15,
     lineHeight: 22,
+  },
+
+  userText: {
+    color: "#FFF5E1",
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 10,
   },
 });
