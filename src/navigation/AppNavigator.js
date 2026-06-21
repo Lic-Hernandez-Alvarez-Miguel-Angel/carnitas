@@ -14,6 +14,7 @@ import ComprasView from "../views/ComprasView";
 import DetallePedidoView from "../views/DetallePedidoView";
 import ConsumiblesView from "../views/ConsumiblesView";
 import PerfilEmpleadoView from "../views/PerfilEmpleadoView";
+import CajaView from "../views/CajaView";
 
 const Stack = createNativeStackNavigator();
 
@@ -36,6 +37,12 @@ export default function AppNavigator() {
         <Stack.Screen
           name="Empleado"
           component={EmpleadoView}
+        />
+
+        {/* CAJA DEL JEFE */}
+        <Stack.Screen
+          name="Caja"
+          component={CajaView}
         />
 
         {/* PERFIL EMPLEADO */}

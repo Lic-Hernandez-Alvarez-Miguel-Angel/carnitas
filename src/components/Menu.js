@@ -9,6 +9,7 @@ export default function Menu({ rol, navigation, usuario }) {
           { titulo: "Empleados", icono: "👥", pantalla: "GestionEmpleados" },
           { titulo: "Compras", icono: "🛒", pantalla: "Compras" },
           { titulo: "Inventario", icono: "📦", pantalla: "Inventario" },
+          { titulo: "Caja", icono: "💵", pantalla: "Caja" },
         ]
       : [
           { titulo: "Ventas", icono: "🍖", pantalla: "Ventas" },
