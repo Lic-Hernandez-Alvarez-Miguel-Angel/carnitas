@@ -1,9 +1,40 @@
 import { API_URL } from "@env";
 
+async function leerRespuesta(response) {
+  const texto = await response.text();
+
+  try {
+    return texto ? JSON.parse(texto) : null;
+  } catch {
+    return texto;
+  }
+}
+
+function obtenerMensajeError(data, mensajeDefault) {
+  if (!data) return mensajeDefault;
+
+  if (typeof data === "string") {
+    return data;
+  }
+
+  return (
+    data.error ||
+    data.mensaje ||
+    data.message ||
+    mensajeDefault
+  );
+}
+
 export async function apiGet(endpoint) {
   const response = await fetch(`${API_URL}${endpoint}`);
-  if (!response.ok) throw new Error("Error al consultar la API");
-  return response.json();
+
+  const data = await leerRespuesta(response);
+
+  if (!response.ok) {
+    throw new Error(obtenerMensajeError(data, "Error al consultar la API"));
+  }
+
+  return data;
 }
 
 export async function apiPost(endpoint, data) {
@@ -12,8 +43,14 @@ export async function apiPost(endpoint, data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!response.ok) throw new Error("Error al enviar datos a la API");
-  return response.json();
+
+  const responseData = await leerRespuesta(response);
+
+  if (!response.ok) {
+    throw new Error(obtenerMensajeError(responseData, "Error al enviar datos a la API"));
+  }
+
+  return responseData;
 }
 
 export async function apiPut(endpoint, data) {
@@ -22,12 +59,26 @@ export async function apiPut(endpoint, data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!response.ok) throw new Error("Error al actualizar datos");
-  return response.json();
+
+  const responseData = await leerRespuesta(response);
+
+  if (!response.ok) {
+    throw new Error(obtenerMensajeError(responseData, "Error al actualizar datos"));
+  }
+
+  return responseData;
 }
 
 export async function apiDelete(endpoint) {
-  const response = await fetch(`${API_URL}${endpoint}`, { method: "DELETE" });
-  if (!response.ok) throw new Error("Error al eliminar datos");
-  return response.json();
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method: "DELETE",
+  });
+
+  const data = await leerRespuesta(response);
+
+  if (!response.ok) {
+    throw new Error(obtenerMensajeError(data, "Error al eliminar datos"));
+  }
+
+  return data;
 }

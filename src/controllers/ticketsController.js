@@ -293,14 +293,3 @@ Pendiente -> Cancelado
 También descuenta el subtotal del total del ticket desde la API
 ========================================
 */
-export async function cancelarItemTicket(ticketId, itemId) {
-  try {
-    return await apiPut(
-      `/tickets/${ticketId}/items/${itemId}/cancelar`,
-      {}
-    );
-  } catch (error) {
-    console.log("Error cancelarItemTicket:", error);
-    return { error: "No se pudo cancelar el producto." };
-  }
-}
