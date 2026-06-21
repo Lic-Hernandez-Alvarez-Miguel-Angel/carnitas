@@ -100,7 +100,7 @@ export default function TicketsView({ navigation, route }) {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-       mediaTypes: [ImagePicker.MediaType.Images],
+     mediaTypes: ["images"],
         allowsEditing: false,
         quality: 0.45,
         base64: true,
@@ -141,7 +141,7 @@ export default function TicketsView({ navigation, route }) {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-     mediaTypes: [ImagePicker.MediaType.Images],
+    mediaTypes: ["images"],
         allowsEditing: false,
         quality: 0.45,
         base64: true,

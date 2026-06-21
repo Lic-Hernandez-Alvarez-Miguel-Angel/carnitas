@@ -2,6 +2,20 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../services/api";
 
 /*
 ========================================
+OBTENER MENSAJE DE ERROR
+========================================
+*/
+function obtenerMensajeError(error, mensajeDefault) {
+  return (
+    error?.message ||
+    error?.response?.data?.error ||
+    error?.response?.data?.mensaje ||
+    mensajeDefault
+  );
+}
+
+/*
+========================================
 CREAR TICKET
 ========================================
 Ahora incluye punto_venta_id para saber
@@ -29,7 +43,10 @@ export async function crearTicket({
     });
   } catch (error) {
     console.log("Error crearTicket:", error);
-    return { error: "No se pudo crear el ticket." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo crear el ticket."),
+    };
   }
 }
 
@@ -64,14 +81,7 @@ export async function obtenerTickets(filtros = {}) {
     return [];
   }
 }
-export async function cancelarItemTicket(ticketId, itemId) {
-  try {
-    return await apiPut(`/tickets/${ticketId}/items/${itemId}/cancelar`, {});
-  } catch (error) {
-    console.log("Error cancelarItemTicket:", error);
-    return { error: "No se pudo cancelar el producto." };
-  }
-}
+
 /*
 ========================================
 OBTENER TICKET POR ID
@@ -126,7 +136,13 @@ export async function agregarItemsATicketMesa(mesa, nuevosItems) {
     });
   } catch (error) {
     console.log("Error agregarItemsATicketMesa:", error);
-    return { error: "No se pudieron agregar productos a la mesa." };
+
+    return {
+      error: obtenerMensajeError(
+        error,
+        "No se pudieron agregar productos a la mesa."
+      ),
+    };
   }
 }
 
@@ -142,7 +158,10 @@ export async function agregarItemsATicket(ticketId, nuevosItems) {
     });
   } catch (error) {
     console.log("Error agregarItemsATicket:", error);
-    return { error: "No se pudieron agregar productos." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudieron agregar productos."),
+    };
   }
 }
 
@@ -156,7 +175,10 @@ export async function eliminarItemPendiente(ticketId, itemId) {
     return await apiDelete(`/tickets/${ticketId}/items/${itemId}`);
   } catch (error) {
     console.log("Error eliminarItemPendiente:", error);
-    return { error: "No se pudo eliminar el producto." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo eliminar el producto."),
+    };
   }
 }
 
@@ -173,7 +195,10 @@ export async function mandarComanda(ticketId) {
     return await apiPost(`/tickets/${ticketId}/comanda`, {});
   } catch (error) {
     console.log("Error mandarComanda:", error);
-    return { error: "No se pudo mandar la comanda." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo mandar la comanda."),
+    };
   }
 }
 
@@ -181,17 +206,9 @@ export async function mandarComanda(ticketId) {
 ========================================
 FINALIZAR TICKET
 ========================================
-Permite enviar:
-- metodo_pago
-- monto_pagado
-- cambio
-========================================
-Ejemplo:
-finalizarTicket(5,{
-  metodo_pago:"efectivo",
-  monto_pagado:500,
-  cambio:120
-})
+Ruta vieja. Se deja por compatibilidad.
+Actualmente el flujo correcto usa:
+solicitarFinalizacionTicket()
 ========================================
 */
 export async function finalizarTicket(ticketId, datosPago = {}) {
@@ -199,21 +216,57 @@ export async function finalizarTicket(ticketId, datosPago = {}) {
     return await apiPut(`/tickets/${ticketId}/finalizar`, datosPago);
   } catch (error) {
     console.log("Error finalizarTicket:", error);
-    return { error: "No se pudo finalizar el ticket." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo finalizar el ticket."),
+    };
   }
 }
+
+/*
+========================================
+SOLICITAR FINALIZACIÓN DEL TICKET
+========================================
+Empleado captura el pago, pero NO cierra
+definitivamente el ticket.
+
+Soporta:
+- efectivo
+- transferencia
+- comprobante_pago en base64
+- comprobante_pago_mime
+========================================
+*/
 export async function solicitarFinalizacionTicket(ticketId, datosPago = {}) {
   try {
     return await apiPut(
       `/tickets/${ticketId}/solicitar-finalizacion`,
-      datosPago
+      {
+        metodo_pago: datosPago?.metodo_pago || "efectivo",
+        monto_pagado: Number(datosPago?.monto_pagado || 0),
+        comprobante_pago: datosPago?.comprobante_pago || null,
+        comprobante_pago_mime: datosPago?.comprobante_pago_mime || null,
+      }
     );
   } catch (error) {
     console.log("Error solicitarFinalizacionTicket:", error);
-    return { error: "No se pudo solicitar la finalización del ticket." };
+
+    return {
+      error: obtenerMensajeError(
+        error,
+        "No se pudo solicitar la finalización del ticket."
+      ),
+    };
   }
 }
 
+/*
+========================================
+CONFIRMAR FINALIZACIÓN DEL TICKET
+========================================
+Solo el jefe confirma el cierre definitivo.
+========================================
+*/
 export async function confirmarFinalizacionTicket(ticketId, usuario = {}) {
   try {
     return await apiPut(
@@ -225,9 +278,16 @@ export async function confirmarFinalizacionTicket(ticketId, usuario = {}) {
     );
   } catch (error) {
     console.log("Error confirmarFinalizacionTicket:", error);
-    return { error: "No se pudo confirmar la finalización del ticket." };
+
+    return {
+      error: obtenerMensajeError(
+        error,
+        "No se pudo confirmar la finalización del ticket."
+      ),
+    };
   }
 }
+
 /*
 ========================================
 ACTUALIZAR CANTIDAD DE ITEM
@@ -244,7 +304,10 @@ export async function actualizarCantidadItem(
     });
   } catch (error) {
     console.log("Error actualizarCantidadItem:", error);
-    return { error: "No se pudo actualizar la cantidad." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo actualizar la cantidad."),
+    };
   }
 }
 
@@ -263,7 +326,10 @@ export async function actualizarItemPendiente(ticketId, itemId, cambios) {
     return await apiPut(`/tickets/${ticketId}/items/${itemId}`, cambios);
   } catch (error) {
     console.log("Error actualizarItemPendiente:", error);
-    return { error: "No se pudo actualizar el producto." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo actualizar el producto."),
+    };
   }
 }
 
@@ -282,14 +348,33 @@ export async function marcarItemEntregado(ticketId, itemId) {
     );
   } catch (error) {
     console.log("Error marcarItemEntregado:", error);
-    return { error: "No se pudo marcar como entregado." };
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo marcar como entregado."),
+    };
   }
 }
+
 /*
 ========================================
 CANCELAR ITEM DEL TICKET
 ========================================
 Pendiente -> Cancelado
-También descuenta el subtotal del total del ticket desde la API
+También descuenta el subtotal del total
+del ticket desde la API.
 ========================================
 */
+export async function cancelarItemTicket(ticketId, itemId) {
+  try {
+    return await apiPut(
+      `/tickets/${ticketId}/items/${itemId}/cancelar`,
+      {}
+    );
+  } catch (error) {
+    console.log("Error cancelarItemTicket:", error);
+
+    return {
+      error: obtenerMensajeError(error, "No se pudo cancelar el producto."),
+    };
+  }
+}
