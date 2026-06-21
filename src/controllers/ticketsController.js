@@ -64,7 +64,14 @@ export async function obtenerTickets(filtros = {}) {
     return [];
   }
 }
-
+export async function cancelarItemTicket(ticketId, itemId) {
+  try {
+    return await apiPut(`/tickets/${ticketId}/items/${itemId}/cancelar`, {});
+  } catch (error) {
+    console.log("Error cancelarItemTicket:", error);
+    return { error: "No se pudo cancelar el producto." };
+  }
+}
 /*
 ========================================
 OBTENER TICKET POR ID

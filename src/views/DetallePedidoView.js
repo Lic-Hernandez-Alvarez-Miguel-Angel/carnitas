@@ -12,6 +12,7 @@ import {
   obtenerTicketPorId,
   agregarItemsATicket,
   marcarItemEntregado,
+  cancelarItemTicket,
 } from "../controllers/ticketsController";
 import {
   obtenerProductos,
@@ -66,7 +67,10 @@ export default function DetallePedidoView({ navigation, route }) {
     if (!ticket?.items) return [];
     return ticket.items.filter((i) => i.estado_item === "entregado");
   }, [ticket]);
-
+const cancelados = useMemo(() => {
+  if (!ticket?.items) return [];
+  return ticket.items.filter((i) => i.estado_item === "cancelado");
+}, [ticket]);
   const importeActual = useMemo(() => {
     if (!modoVenta) return 0;
 
@@ -167,7 +171,35 @@ export default function DetallePedidoView({ navigation, route }) {
     Alert.alert("Entregado", "Producto marcado como entregado.");
     cargarDatos();
   };
+const cancelarProducto = async (item) => {
+  Alert.alert(
+    "Cancelar producto",
+    `¿Seguro que deseas cancelar ${item.nombre_producto}?\n\nSe descontará $${Number(
+      item.subtotal || 0
+    ).toFixed(2)} del total del ticket.`,
+    [
+      {
+        text: "No",
+        style: "cancel",
+      },
+      {
+        text: "Sí, cancelar",
+        style: "destructive",
+        onPress: async () => {
+          const result = await cancelarItemTicket(ticket.id, item.id);
 
+          if (result?.error) {
+            Alert.alert("Error", result.error);
+            return;
+          }
+
+          Alert.alert("Cancelado", "Producto cancelado correctamente.");
+          cargarDatos();
+        },
+      },
+    ]
+  );
+};
   if (!ticket) {
     return (
       <ScreenWrapper contentContainerStyle={styles.container}>
@@ -220,30 +252,55 @@ export default function DetallePedidoView({ navigation, route }) {
             >
               <Text style={styles.buttonText}>Marcar entregado</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+  style={styles.cancelItemButton}
+  onPress={() => cancelarProducto(item)}
+>
+  <Text style={styles.buttonText}>Cancelar producto</Text>
+</TouchableOpacity>
           </View>
         ))
       )}
 
-      <Text style={styles.section}>Entregados</Text>
+  <Text style={styles.section}>Entregados</Text>
 
-      {entregados.length === 0 ? (
-        <Text style={styles.empty}>Aún no hay productos entregados.</Text>
-      ) : (
-        entregados.map((item) => (
-          <View key={item.id} style={styles.deliveredCard}>
-            <Text style={styles.itemName}>{item.nombre_producto}</Text>
-            <Text style={styles.info}>
-              {item.unidad} · {item.cantidad}
-            </Text>
-            <Text style={styles.itemPrice}>
-              ${Number(item.subtotal || 0).toFixed(2)}
-            </Text>
-            <Text style={styles.status}>Entregado</Text>
-          </View>
-        ))
-      )}
+{entregados.length === 0 ? (
+  <Text style={styles.empty}>Aún no hay productos entregados.</Text>
+) : (
+  entregados.map((item) => (
+    <View key={item.id} style={styles.deliveredCard}>
+      <Text style={styles.itemName}>{item.nombre_producto}</Text>
+      <Text style={styles.info}>
+        {item.unidad} · {item.cantidad}
+      </Text>
+      <Text style={styles.itemPrice}>
+        ${Number(item.subtotal || 0).toFixed(2)}
+      </Text>
+      <Text style={styles.status}>Entregado</Text>
+    </View>
+  ))
+)}
 
-      {ticket.estado === "abierto" && (
+<Text style={styles.section}>Cancelados</Text>
+
+{cancelados.length === 0 ? (
+  <Text style={styles.empty}>No hay productos cancelados.</Text>
+) : (
+  cancelados.map((item) => (
+    <View key={item.id} style={styles.cancelledCard}>
+      <Text style={styles.itemName}>{item.nombre_producto}</Text>
+      <Text style={styles.info}>
+        {item.unidad} · {item.cantidad}
+      </Text>
+      <Text style={styles.itemPrice}>
+        ${Number(item.subtotal || 0).toFixed(2)}
+      </Text>
+      <Text style={styles.cancelledStatus}>Cancelado</Text>
+    </View>
+  ))
+)}
+
+{ticket.estado === "abierto" && (
         <>
           <Text style={styles.section}>Agregar productos</Text>
 
@@ -600,4 +657,23 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 8,
   },
+  cancelItemButton: {
+  backgroundColor: "#B00020",
+  paddingVertical: 12,
+  borderRadius: 14,
+  marginTop: 10,
+},
+cancelledCard: {
+  backgroundColor: "#FDECEC",
+  borderRadius: 18,
+  padding: 16,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: "#F3B8B8",
+},
+cancelledStatus: {
+  color: "#B00020",
+  fontWeight: "800",
+  marginTop: 8,
+},
 });
