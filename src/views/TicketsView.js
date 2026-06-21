@@ -6,7 +6,10 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  Image,
+  Modal,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import ScreenWrapper from "../components/ScreenWrapper";
 import {
   obtenerTickets,
@@ -23,7 +26,10 @@ export default function TicketsView({ navigation, route }) {
   const [tickets, setTickets] = useState([]);
   const [ticketPagandoId, setTicketPagandoId] = useState(null);
   const [montoPagado, setMontoPagado] = useState("");
+  const [metodoPago, setMetodoPago] = useState("efectivo");
+  const [comprobantePago, setComprobantePago] = useState(null);
   const [zonaAsignada, setZonaAsignada] = useState(null);
+  const [comprobanteModal, setComprobanteModal] = useState(null);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
@@ -61,22 +67,153 @@ export default function TicketsView({ navigation, route }) {
     }
   };
 
-  const handleFinalizarTicket = async (ticket) => {
-    const pagado = parseFloat(montoPagado);
-    const total = Number(ticket.total || 0);
+  const limpiarPago = () => {
+    setTicketPagandoId(null);
+    setMontoPagado("");
+    setMetodoPago("efectivo");
+    setComprobantePago(null);
+  };
 
-    if (isNaN(pagado) || pagado < total) {
+  const abrirPanelPago = (ticketId) => {
+    setTicketPagandoId(ticketId);
+    setMontoPagado("");
+    setMetodoPago("efectivo");
+    setComprobantePago(null);
+  };
+
+  const seleccionarMetodoPago = (metodo) => {
+    setMetodoPago(metodo);
+    setMontoPagado("");
+    setComprobantePago(null);
+  };
+
+  const tomarFotoComprobante = async () => {
+    try {
+      const permiso = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!permiso.granted) {
+        Alert.alert(
+          "Permiso requerido",
+          "Necesitas permitir el uso de la cámara para tomar el comprobante."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.45,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        const foto = result.assets[0];
+
+        if (!foto.base64) {
+          Alert.alert("Error", "No se pudo obtener la imagen del comprobante.");
+          return;
+        }
+
+        setComprobantePago({
+          base64: foto.base64,
+          mime: foto.mimeType || "image/jpeg",
+          uri: foto.uri,
+        });
+
+        Alert.alert("Comprobante", "Foto del comprobante guardada.");
+      }
+    } catch (error) {
+      console.log("Error tomarFotoComprobante:", error);
+      Alert.alert("Error", "No se pudo tomar la foto del comprobante.");
+    }
+  };
+
+  const seleccionarComprobanteGaleria = async () => {
+    try {
+      const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permiso.granted) {
+        Alert.alert(
+          "Permiso requerido",
+          "Necesitas permitir el acceso a la galería para seleccionar el comprobante."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.45,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        const foto = result.assets[0];
+
+        if (!foto.base64) {
+          Alert.alert("Error", "No se pudo obtener la imagen del comprobante.");
+          return;
+        }
+
+        setComprobantePago({
+          base64: foto.base64,
+          mime: foto.mimeType || "image/jpeg",
+          uri: foto.uri,
+        });
+
+        Alert.alert("Comprobante", "Comprobante seleccionado correctamente.");
+      }
+    } catch (error) {
+      console.log("Error seleccionarComprobanteGaleria:", error);
+      Alert.alert("Error", "No se pudo seleccionar el comprobante.");
+    }
+  };
+
+  const abrirComprobante = (ticket) => {
+    if (!ticket?.comprobante_pago) {
+      Alert.alert("Sin comprobante", "Este ticket no tiene comprobante guardado.");
+      return;
+    }
+
+    setComprobanteModal({
+      mime: ticket.comprobante_pago_mime || "image/jpeg",
+      base64: ticket.comprobante_pago,
+      folio: ticket.folio,
+    });
+  };
+
+  const handleFinalizarTicket = async (ticket) => {
+    const total = Number(ticket.total || 0);
+    const pagado = parseFloat(montoPagado);
+
+    if (metodoPago === "efectivo") {
+      if (isNaN(pagado) || pagado < total) {
+        Alert.alert(
+          "Pago insuficiente",
+          `El cliente debe pagar mínimo $${total.toFixed(2)}`
+        );
+        return;
+      }
+    }
+
+    if (metodoPago === "transferencia" && !comprobantePago?.base64) {
       Alert.alert(
-        "Pago insuficiente",
-        `El cliente debe pagar mínimo $${total.toFixed(2)}`
+        "Comprobante requerido",
+        "Para pago por transferencia debes tomar o seleccionar la foto del comprobante."
       );
       return;
     }
 
     try {
       const result = await solicitarFinalizacionTicket(ticket.id, {
-        metodo_pago: "efectivo",
-        monto_pagado: pagado,
+        metodo_pago: metodoPago,
+        monto_pagado: metodoPago === "efectivo" ? pagado : total,
+        comprobante_pago:
+          metodoPago === "transferencia" ? comprobantePago.base64 : null,
+        comprobante_pago_mime:
+          metodoPago === "transferencia"
+            ? comprobantePago.mime || "image/jpeg"
+            : null,
       });
 
       if (result?.error) {
@@ -84,17 +221,20 @@ export default function TicketsView({ navigation, route }) {
         return;
       }
 
-      const cambio = pagado - total;
+      const cambio = metodoPago === "efectivo" ? pagado - total : 0;
 
       Alert.alert(
         "Solicitud enviada",
-        `El ticket fue enviado al jefe para confirmación.\n\nTotal: $${total.toFixed(
-          2
-        )}\nPagó: $${pagado.toFixed(2)}\nCambio: $${cambio.toFixed(2)}`
+        metodoPago === "efectivo"
+          ? `El ticket fue enviado al jefe para confirmación.\n\nMétodo: Efectivo\nTotal: $${total.toFixed(
+              2
+            )}\nPagó: $${pagado.toFixed(2)}\nCambio: $${cambio.toFixed(2)}`
+          : `El ticket fue enviado al jefe para confirmación.\n\nMétodo: Transferencia\nTotal: $${total.toFixed(
+              2
+            )}\nComprobante guardado correctamente.`
       );
 
-      setTicketPagandoId(null);
-      setMontoPagado("");
+      limpiarPago();
       cargarTickets();
     } catch (error) {
       console.log("Error solicitando finalización:", error);
@@ -103,11 +243,14 @@ export default function TicketsView({ navigation, route }) {
   };
 
   const handleConfirmarFinalizacion = async (ticket) => {
+    const metodo = ticket.metodo_pago || "-";
+    const total = Number(ticket.total || 0);
+
     Alert.alert(
       "Confirmar finalización",
-      `¿Deseas cerrar definitivamente el ticket ${ticket.folio}?\n\nTotal: $${Number(
-        ticket.total || 0
-      ).toFixed(2)}`,
+      `¿Deseas cerrar definitivamente el ticket ${ticket.folio}?\n\nTotal: $${total.toFixed(
+        2
+      )}\nMétodo de pago: ${metodo}`,
       [
         {
           text: "Cancelar",
@@ -168,7 +311,13 @@ export default function TicketsView({ navigation, route }) {
           const total = Number(ticket.total || 0);
           const pagado = parseFloat(montoPagado || "0");
           const cambio =
-            ticketPagandoId === ticket.id ? Math.max(pagado - total, 0) : 0;
+            ticketPagandoId === ticket.id && metodoPago === "efectivo"
+              ? Math.max(pagado - total, 0)
+              : 0;
+
+          const mostrarPago =
+            ticket.estado === "pendiente_confirmacion" ||
+            ticket.estado === "cerrado";
 
           return (
             <View key={ticket.id} style={styles.ticketCard}>
@@ -202,8 +351,10 @@ export default function TicketsView({ navigation, route }) {
                 Fecha: {ticket.fecha_venta || ticket.fecha || "-"}
               </Text>
 
-              {ticket.estado === "cerrado" && (
-                <>
+              {mostrarPago && (
+                <View style={styles.paymentInfoBox}>
+                  <Text style={styles.paymentInfoTitle}>Información de pago</Text>
+
                   <Text style={styles.info}>
                     Método pago: {ticket.metodo_pago || "-"}
                   </Text>
@@ -220,7 +371,22 @@ export default function TicketsView({ navigation, route }) {
                       Cambio: ${Number(ticket.cambio || 0).toFixed(2)}
                     </Text>
                   )}
-                </>
+
+                  {ticket.fecha_pago ? (
+                    <Text style={styles.info}>Fecha pago: {ticket.fecha_pago}</Text>
+                  ) : null}
+
+                  {ticket.metodo_pago === "transferencia" && (
+                    <TouchableOpacity
+                      style={styles.receiptButton}
+                      onPress={() => abrirComprobante(ticket)}
+                    >
+                      <Text style={styles.receiptButtonText}>
+                        Ver comprobante
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               )}
 
               <Text style={styles.total}>Total: ${total.toFixed(2)}</Text>
@@ -245,19 +411,100 @@ export default function TicketsView({ navigation, route }) {
                 rol !== "jefe" &&
                 (ticketPagandoId === ticket.id ? (
                   <View style={styles.paymentBox}>
-                    <Text style={styles.paymentTitle}>Pago en efectivo</Text>
+                    <Text style={styles.paymentTitle}>Selecciona el pago</Text>
 
-                    <TextInput
-                      style={styles.paymentInput}
-                      placeholder="¿Con cuánto paga?"
-                      value={montoPagado}
-                      onChangeText={setMontoPagado}
-                      keyboardType="numeric"
-                    />
+                    <View style={styles.methodRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.methodButton,
+                          metodoPago === "efectivo" && styles.methodButtonActive,
+                        ]}
+                        onPress={() => seleccionarMetodoPago("efectivo")}
+                      >
+                        <Text
+                          style={[
+                            styles.methodButtonText,
+                            metodoPago === "efectivo" &&
+                              styles.methodButtonTextActive,
+                          ]}
+                        >
+                          Efectivo
+                        </Text>
+                      </TouchableOpacity>
 
-                    <Text style={styles.changeText}>
-                      Cambio: ${cambio.toFixed(2)}
-                    </Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.methodButton,
+                          metodoPago === "transferencia" &&
+                            styles.methodButtonActive,
+                        ]}
+                        onPress={() => seleccionarMetodoPago("transferencia")}
+                      >
+                        <Text
+                          style={[
+                            styles.methodButtonText,
+                            metodoPago === "transferencia" &&
+                              styles.methodButtonTextActive,
+                          ]}
+                        >
+                          Transferencia
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {metodoPago === "efectivo" ? (
+                      <>
+                        <TextInput
+                          style={styles.paymentInput}
+                          placeholder="¿Con cuánto paga?"
+                          value={montoPagado}
+                          onChangeText={setMontoPagado}
+                          keyboardType="numeric"
+                        />
+
+                        <Text style={styles.changeText}>
+                          Cambio: ${cambio.toFixed(2)}
+                        </Text>
+                      </>
+                    ) : (
+                      <View style={styles.transferBox}>
+                        <Text style={styles.transferText}>
+                          Para transferencia es obligatorio guardar el
+                          comprobante del pago.
+                        </Text>
+
+                        {comprobantePago?.uri ? (
+                          <Image
+                            source={{ uri: comprobantePago.uri }}
+                            style={styles.previewImage}
+                          />
+                        ) : null}
+
+                        <TouchableOpacity
+                          style={styles.cameraButton}
+                          onPress={tomarFotoComprobante}
+                        >
+                          <Text style={styles.cameraButtonText}>
+                            Tomar foto del comprobante
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.galleryButton}
+                          onPress={seleccionarComprobanteGaleria}
+                        >
+                          <Text style={styles.galleryButtonText}>
+                            Seleccionar de galería
+                          </Text>
+                        </TouchableOpacity>
+
+                        {comprobantePago?.base64 ? (
+                          <Text style={styles.receiptReady}>
+                            Comprobante cargado correctamente
+                          </Text>
+                        ) : null}
+                      </View>
+                    )}
 
                     <TouchableOpacity
                       style={styles.finishButton}
@@ -270,10 +517,7 @@ export default function TicketsView({ navigation, route }) {
 
                     <TouchableOpacity
                       style={styles.cancelButton}
-                      onPress={() => {
-                        setTicketPagandoId(null);
-                        setMontoPagado("");
-                      }}
+                      onPress={limpiarPago}
                     >
                       <Text style={styles.finishButtonText}>Cancelar</Text>
                     </TouchableOpacity>
@@ -281,14 +525,9 @@ export default function TicketsView({ navigation, route }) {
                 ) : (
                   <TouchableOpacity
                     style={styles.finishButton}
-                    onPress={() => {
-                      setTicketPagandoId(ticket.id);
-                      setMontoPagado("");
-                    }}
+                    onPress={() => abrirPanelPago(ticket.id)}
                   >
-                    <Text style={styles.finishButtonText}>
-                      Finalizar orden
-                    </Text>
+                    <Text style={styles.finishButtonText}>Finalizar orden</Text>
                   </TouchableOpacity>
                 ))}
 
@@ -306,6 +545,38 @@ export default function TicketsView({ navigation, route }) {
           );
         })
       )}
+
+      <Modal
+        visible={!!comprobanteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setComprobanteModal(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              Comprobante {comprobanteModal?.folio || ""}
+            </Text>
+
+            {comprobanteModal?.base64 ? (
+              <Image
+                source={{
+                  uri: `data:${comprobanteModal.mime};base64,${comprobanteModal.base64}`,
+                }}
+                style={styles.comprobanteImage}
+                resizeMode="contain"
+              />
+            ) : null}
+
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setComprobanteModal(null)}
+            >
+              <Text style={styles.finishButtonText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenWrapper>
   );
 }
@@ -361,7 +632,7 @@ const styles = StyleSheet.create({
 
   zoneValue: {
     color: "#1E7D32",
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
   },
 
@@ -370,23 +641,32 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#4A1F0F",
     marginBottom: 12,
-    marginTop: 8,
+  },
+
+  empty: {
+    color: "#7A6A59",
+    fontSize: 15,
   },
 
   ticketCard: {
     backgroundColor: "#FFF9F0",
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E9D9BF",
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
 
   folio: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "800",
     color: "#8B0000",
-    marginBottom: 6,
+    marginBottom: 8,
   },
 
   info: {
@@ -395,96 +675,248 @@ const styles = StyleSheet.create({
   },
 
   pendingText: {
-    backgroundColor: "#FFF3CD",
-    color: "#856404",
-    padding: 10,
+    color: "#B26A00",
+    backgroundColor: "#FFF4D7",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 10,
-    marginTop: 8,
-    marginBottom: 8,
     fontWeight: "800",
-    textAlign: "center",
+    marginVertical: 8,
   },
 
   total: {
-    marginTop: 10,
+    color: "#2E1B0E",
     fontSize: 20,
     fontWeight: "800",
-    color: "#8B0000",
-  },
-
-  empty: {
-    color: "#7A6A59",
+    marginTop: 10,
+    marginBottom: 12,
   },
 
   detailButton: {
-    backgroundColor: "#D35400",
-    paddingVertical: 14,
+    backgroundColor: "#F7E6C4",
+    paddingVertical: 12,
     borderRadius: 14,
-    marginTop: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E9D9BF",
   },
 
   detailButtonText: {
-    color: "#fff",
+    color: "#4A1F0F",
     textAlign: "center",
     fontWeight: "800",
-    fontSize: 16,
+  },
+
+  paymentBox: {
+    backgroundColor: "#FDF1DF",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E9D9BF",
+    marginTop: 8,
+  },
+
+  paymentTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#4A1F0F",
+    marginBottom: 10,
+  },
+
+  paymentInput: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5D3B3",
+    marginBottom: 10,
+  },
+
+  paymentInfoBox: {
+    backgroundColor: "#F3F8FF",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+
+  paymentInfoTitle: {
+    color: "#1B4B7A",
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+
+  methodRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  methodButton: {
+    flex: 1,
+    backgroundColor: "#FFF9F0",
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5D3B3",
+  },
+
+  methodButtonActive: {
+    backgroundColor: "#8B0000",
+    borderColor: "#8B0000",
+  },
+
+  methodButtonText: {
+    color: "#4A1F0F",
+    textAlign: "center",
+    fontWeight: "800",
+  },
+
+  methodButtonTextActive: {
+    color: "#fff",
+  },
+
+  changeText: {
+    color: "#1E7D32",
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 10,
+  },
+
+  transferBox: {
+    backgroundColor: "#FFF9F0",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5D3B3",
+    marginBottom: 12,
+  },
+
+  transferText: {
+    color: "#6E5B4B",
+    marginBottom: 10,
+    lineHeight: 20,
+  },
+
+  previewImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 14,
+    marginBottom: 10,
+    backgroundColor: "#EEE",
+  },
+
+  cameraButton: {
+    backgroundColor: "#2E86C1",
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+  },
+
+  cameraButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  galleryButton: {
+    backgroundColor: "#6C5CE7",
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+  },
+
+  galleryButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  receiptReady: {
+    color: "#1E7D32",
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 4,
+  },
+
+  receiptButton: {
+    backgroundColor: "#2E86C1",
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+
+  receiptButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    textAlign: "center",
   },
 
   finishButton: {
-    backgroundColor: "#8B0000",
+    backgroundColor: "#27AE60",
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginTop: 8,
+  },
+
+  confirmButton: {
+    backgroundColor: "#1E7D32",
     paddingVertical: 14,
     borderRadius: 14,
     marginTop: 10,
   },
 
-  confirmButton: {
-    backgroundColor: "#27AE60",
+  cancelButton: {
+    backgroundColor: "#8B0000",
     paddingVertical: 14,
     borderRadius: 14,
-    marginTop: 10,
+    marginTop: 8,
   },
 
   finishButtonText: {
     color: "#fff",
     textAlign: "center",
     fontWeight: "800",
-    fontSize: 16,
+    fontSize: 15,
   },
 
-  paymentBox: {
-    backgroundColor: "#FDF1E0",
-    borderRadius: 16,
-    padding: 14,
-    marginTop: 12,
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
   },
 
-  paymentTitle: {
+  modalCard: {
+    backgroundColor: "#FFF9F0",
+    borderRadius: 20,
+    padding: 16,
+    width: "100%",
+    maxHeight: "90%",
+  },
+
+  modalTitle: {
     color: "#4A1F0F",
+    fontSize: 20,
     fontWeight: "800",
-    marginBottom: 10,
-    fontSize: 16,
+    marginBottom: 12,
+    textAlign: "center",
   },
 
-  paymentInput: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#E5D3B3",
-    marginBottom: 10,
+  comprobanteImage: {
+    width: "100%",
+    height: 480,
+    backgroundColor: "#EEE",
+    borderRadius: 14,
   },
 
-  changeText: {
-    color: "#27AE60",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 10,
-  },
-
-  cancelButton: {
-    backgroundColor: "#7F8C8D",
+  modalCloseButton: {
+    backgroundColor: "#8B0000",
     paddingVertical: 14,
     borderRadius: 14,
-    marginTop: 10,
+    marginTop: 14,
   },
 });
