@@ -10,7 +10,8 @@ import {
 import ScreenWrapper from "../components/ScreenWrapper";
 import {
   obtenerTickets,
-  finalizarTicket,
+  solicitarFinalizacionTicket,
+  confirmarFinalizacionTicket,
 } from "../controllers/ticketsController";
 import { apiGet } from "../services/api";
 
@@ -53,7 +54,7 @@ export default function TicketsView({ navigation, route }) {
         rol,
       });
 
-      setTickets(data);
+      setTickets(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log("Error cargando tickets:", error);
       Alert.alert("Error", "No se pudieron cargar los tickets.");
@@ -73,7 +74,7 @@ export default function TicketsView({ navigation, route }) {
     }
 
     try {
-      const result = await finalizarTicket(ticket.id, {
+      const result = await solicitarFinalizacionTicket(ticket.id, {
         metodo_pago: "efectivo",
         monto_pagado: pagado,
       });
@@ -86,18 +87,48 @@ export default function TicketsView({ navigation, route }) {
       const cambio = pagado - total;
 
       Alert.alert(
-        "Orden finalizada",
-        `Total: $${total.toFixed(2)}\nPagó: $${pagado.toFixed(
+        "Solicitud enviada",
+        `El ticket fue enviado al jefe para confirmación.\n\nTotal: $${total.toFixed(
           2
-        )}\nCambio: $${cambio.toFixed(2)}`
+        )}\nPagó: $${pagado.toFixed(2)}\nCambio: $${cambio.toFixed(2)}`
       );
 
       setTicketPagandoId(null);
       setMontoPagado("");
       cargarTickets();
     } catch (error) {
-      Alert.alert("Error", "No se pudo finalizar el ticket.");
+      console.log("Error solicitando finalización:", error);
+      Alert.alert("Error", "No se pudo solicitar la finalización del ticket.");
     }
+  };
+
+  const handleConfirmarFinalizacion = async (ticket) => {
+    Alert.alert(
+      "Confirmar finalización",
+      `¿Deseas cerrar definitivamente el ticket ${ticket.folio}?\n\nTotal: $${Number(
+        ticket.total || 0
+      ).toFixed(2)}`,
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Confirmar",
+          onPress: async () => {
+            const result = await confirmarFinalizacionTicket(ticket.id, usuario);
+
+            if (result?.error) {
+              Alert.alert("Atención", result.error);
+              return;
+            }
+
+            Alert.alert("Finalizado", "El ticket fue confirmado por el jefe.");
+            cargarTickets();
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -161,6 +192,12 @@ export default function TicketsView({ navigation, route }) {
 
               <Text style={styles.info}>Estado: {ticket.estado}</Text>
 
+              {ticket.estado === "pendiente_confirmacion" && (
+                <Text style={styles.pendingText}>
+                  Pendiente de confirmación por jefe
+                </Text>
+              )}
+
               <Text style={styles.info}>
                 Fecha: {ticket.fecha_venta || ticket.fecha || "-"}
               </Text>
@@ -205,6 +242,7 @@ export default function TicketsView({ navigation, route }) {
               </TouchableOpacity>
 
               {ticket.estado === "abierto" &&
+                rol !== "jefe" &&
                 (ticketPagandoId === ticket.id ? (
                   <View style={styles.paymentBox}>
                     <Text style={styles.paymentTitle}>Pago en efectivo</Text>
@@ -225,7 +263,9 @@ export default function TicketsView({ navigation, route }) {
                       style={styles.finishButton}
                       onPress={() => handleFinalizarTicket(ticket)}
                     >
-                      <Text style={styles.finishButtonText}>Confirmar pago</Text>
+                      <Text style={styles.finishButtonText}>
+                        Solicitar finalización
+                      </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -246,9 +286,22 @@ export default function TicketsView({ navigation, route }) {
                       setMontoPagado("");
                     }}
                   >
-                    <Text style={styles.finishButtonText}>Finalizar orden</Text>
+                    <Text style={styles.finishButtonText}>
+                      Finalizar orden
+                    </Text>
                   </TouchableOpacity>
                 ))}
+
+              {ticket.estado === "pendiente_confirmacion" && rol === "jefe" && (
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={() => handleConfirmarFinalizacion(ticket)}
+                >
+                  <Text style={styles.finishButtonText}>
+                    Confirmar finalización
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           );
         })
@@ -261,6 +314,7 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
   },
+
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -268,12 +322,14 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     gap: 12,
   },
+
   title: {
     flex: 1,
     fontSize: 28,
     fontWeight: "800",
     color: "#4A1F0F",
   },
+
   homeButton: {
     backgroundColor: "#C0392B",
     paddingVertical: 10,
@@ -282,10 +338,12 @@ const styles = StyleSheet.create({
     minWidth: 90,
     alignItems: "center",
   },
+
   homeButtonText: {
     color: "#fff",
     fontWeight: "800",
   },
+
   zoneBox: {
     backgroundColor: "#EAF7E9",
     borderRadius: 16,
@@ -294,16 +352,19 @@ const styles = StyleSheet.create({
     borderColor: "#BFE6B8",
     marginBottom: 16,
   },
+
   zoneLabel: {
     color: "#4D6B50",
     fontWeight: "700",
     marginBottom: 4,
   },
+
   zoneValue: {
     color: "#1E7D32",
     fontSize: 20,
     fontWeight: "800",
   },
+
   section: {
     fontSize: 22,
     fontWeight: "800",
@@ -311,6 +372,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
+
   ticketCard: {
     backgroundColor: "#FFF9F0",
     borderRadius: 18,
@@ -319,61 +381,90 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E9D9BF",
   },
+
   folio: {
     fontSize: 18,
     fontWeight: "800",
     color: "#8B0000",
     marginBottom: 6,
   },
+
   info: {
     color: "#6E5B4B",
     marginBottom: 4,
   },
+
+  pendingText: {
+    backgroundColor: "#FFF3CD",
+    color: "#856404",
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 8,
+    marginBottom: 8,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
   total: {
     marginTop: 10,
     fontSize: 20,
     fontWeight: "800",
     color: "#8B0000",
   },
+
   empty: {
     color: "#7A6A59",
   },
+
   detailButton: {
     backgroundColor: "#D35400",
     paddingVertical: 14,
     borderRadius: 14,
     marginTop: 14,
   },
+
   detailButtonText: {
     color: "#fff",
     textAlign: "center",
     fontWeight: "800",
     fontSize: 16,
   },
+
   finishButton: {
     backgroundColor: "#8B0000",
     paddingVertical: 14,
     borderRadius: 14,
     marginTop: 10,
   },
+
+  confirmButton: {
+    backgroundColor: "#27AE60",
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginTop: 10,
+  },
+
   finishButtonText: {
     color: "#fff",
     textAlign: "center",
     fontWeight: "800",
     fontSize: 16,
   },
+
   paymentBox: {
     backgroundColor: "#FDF1E0",
     borderRadius: 16,
     padding: 14,
     marginTop: 12,
   },
+
   paymentTitle: {
     color: "#4A1F0F",
     fontWeight: "800",
     marginBottom: 10,
     fontSize: 16,
   },
+
   paymentInput: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -382,12 +473,14 @@ const styles = StyleSheet.create({
     borderColor: "#E5D3B3",
     marginBottom: 10,
   },
+
   changeText: {
     color: "#27AE60",
     fontSize: 18,
     fontWeight: "800",
     marginBottom: 10,
   },
+
   cancelButton: {
     backgroundColor: "#7F8C8D",
     paddingVertical: 14,
