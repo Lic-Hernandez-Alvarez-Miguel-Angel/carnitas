@@ -202,7 +202,32 @@ export async function finalizarTicket(ticketId, datosPago = {}) {
     return { error: "No se pudo finalizar el ticket." };
   }
 }
+export async function solicitarFinalizacionTicket(ticketId, datosPago = {}) {
+  try {
+    return await apiPut(
+      `/tickets/${ticketId}/solicitar-finalizacion`,
+      datosPago
+    );
+  } catch (error) {
+    console.log("Error solicitarFinalizacionTicket:", error);
+    return { error: "No se pudo solicitar la finalización del ticket." };
+  }
+}
 
+export async function confirmarFinalizacionTicket(ticketId, usuario = {}) {
+  try {
+    return await apiPut(
+      `/tickets/${ticketId}/confirmar-finalizacion`,
+      {
+        rol: usuario?.rol,
+        usuario_id: usuario?.id,
+      }
+    );
+  } catch (error) {
+    console.log("Error confirmarFinalizacionTicket:", error);
+    return { error: "No se pudo confirmar la finalización del ticket." };
+  }
+}
 /*
 ========================================
 ACTUALIZAR CANTIDAD DE ITEM
@@ -258,5 +283,24 @@ export async function marcarItemEntregado(ticketId, itemId) {
   } catch (error) {
     console.log("Error marcarItemEntregado:", error);
     return { error: "No se pudo marcar como entregado." };
+  }
+}
+/*
+========================================
+CANCELAR ITEM DEL TICKET
+========================================
+Pendiente -> Cancelado
+También descuenta el subtotal del total del ticket desde la API
+========================================
+*/
+export async function cancelarItemTicket(ticketId, itemId) {
+  try {
+    return await apiPut(
+      `/tickets/${ticketId}/items/${itemId}/cancelar`,
+      {}
+    );
+  } catch (error) {
+    console.log("Error cancelarItemTicket:", error);
+    return { error: "No se pudo cancelar el producto." };
   }
 }
