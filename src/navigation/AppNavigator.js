@@ -15,6 +15,7 @@ import DetallePedidoView from "../views/DetallePedidoView";
 import ConsumiblesView from "../views/ConsumiblesView";
 import PerfilEmpleadoView from "../views/PerfilEmpleadoView";
 import CajaView from "../views/CajaView";
+import GastosView from "../views/GastosView";
 
 const Stack = createNativeStackNavigator();
 
@@ -93,6 +94,10 @@ export default function AppNavigator() {
           name="Compras"
           component={ComprasView}
         />
+        <Stack.Screen
+  name="Gastos"
+  component={GastosView}
+/>
       </Stack.Navigator>
     </NavigationContainer>
   );

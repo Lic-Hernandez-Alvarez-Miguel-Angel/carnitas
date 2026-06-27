@@ -101,4 +101,61 @@ export async function cerrarCaja(cajaId, data) {
         "No se pudo cerrar la caja.",
     };
   }
+  /*
+========================================
+OBTENER RESUMEN DE CAJA
+========================================
+*/
+export async function obtenerResumenCaja(cajaId = null) {
+  try {
+    const query = cajaId ? `?caja_id=${cajaId}` : "";
+    return await apiGet(`/caja/resumen${query}`);
+  } catch (error) {
+    console.log("Error obtenerResumenCaja:", error);
+    return null;
+  }
+}
+
+/*
+========================================
+OBTENER GASTOS DE CAJA
+========================================
+*/
+export async function obtenerGastosCaja(cajaId) {
+  try {
+    if (!cajaId) return [];
+    const result = await apiGet(`/caja/gastos?caja_id=${cajaId}`);
+    return Array.isArray(result) ? result : [];
+  } catch (error) {
+    console.log("Error obtenerGastosCaja:", error);
+    return [];
+  }
+}
+
+/*
+========================================
+CREAR GASTO DE CAJA
+========================================
+*/
+export async function crearGastoCaja(data) {
+  try {
+    return await apiPost("/caja/gastos", {
+      caja_id: data?.caja_id,
+      usuario_id: data?.usuario_id || null,
+      concepto: data?.concepto || "",
+      categoria: data?.categoria || "personal",
+      monto: Number(data?.monto || 0),
+      observaciones: data?.observaciones || "",
+    });
+  } catch (error) {
+    console.log("Error crearGastoCaja:", error);
+
+    return {
+      error:
+        error?.message ||
+        error?.response?.data?.error ||
+        "No se pudo registrar el gasto.",
+    };
+  }
+}
 }

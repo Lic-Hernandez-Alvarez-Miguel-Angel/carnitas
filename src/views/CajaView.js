@@ -13,6 +13,7 @@ import {
   cerrarCaja,
   obtenerCajaAbierta,
   obtenerHistorialCaja,
+  obtenerResumenCaja,
 } from "../controllers/cajaController";
 
 export default function CajaView({ navigation, route }) {
@@ -20,9 +21,12 @@ export default function CajaView({ navigation, route }) {
 
   const [cajaAbierta, setCajaAbierta] = useState(null);
   const [historial, setHistorial] = useState([]);
+  const [resumenCaja, setResumenCaja] = useState(null);
+
   const [montoInicial, setMontoInicial] = useState("");
   const [montoFinal, setMontoFinal] = useState("");
   const [observaciones, setObservaciones] = useState("");
+
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -45,6 +49,10 @@ export default function CajaView({ navigation, route }) {
     }
   };
 
+  const formatearDinero = (valor) => {
+    return Number(valor || 0).toFixed(2);
+  };
+
   const cargarCaja = async () => {
     try {
       const abierta = await obtenerCajaAbierta();
@@ -52,6 +60,13 @@ export default function CajaView({ navigation, route }) {
 
       setCajaAbierta(abierta);
       setHistorial(Array.isArray(lista) ? lista : []);
+
+      if (abierta?.id) {
+        const resumen = await obtenerResumenCaja(abierta.id);
+        setResumenCaja(resumen || null);
+      } else {
+        setResumenCaja(null);
+      }
     } catch (error) {
       console.log("Error cargarCaja:", error);
       Alert.alert("Error", "No se pudo cargar la información de caja.");
@@ -97,9 +112,16 @@ export default function CajaView({ navigation, route }) {
       return;
     }
 
+    const efectivoEsperado = Number(resumenCaja?.efectivo_esperado || 0);
+    const diferencia = monto - efectivoEsperado;
+
     Alert.alert(
       "Cerrar caja",
-      `¿Deseas cerrar la caja con $${monto.toFixed(2)}?`,
+      `¿Deseas cerrar la caja con $${monto.toFixed(
+        2
+      )}?\n\nEfectivo esperado: $${efectivoEsperado.toFixed(
+        2
+      )}\nDiferencia: $${diferencia.toFixed(2)}`,
       [
         {
           text: "Cancelar",
@@ -110,9 +132,15 @@ export default function CajaView({ navigation, route }) {
           onPress: async () => {
             setLoading(true);
 
+            const observacionFinal =
+              observaciones?.trim() ||
+              `Cierre de caja. Efectivo esperado: $${efectivoEsperado.toFixed(
+                2
+              )}. Diferencia: $${diferencia.toFixed(2)}.`;
+
             const result = await cerrarCaja(cajaAbierta.id, {
               monto_final: monto,
-              observaciones,
+              observaciones: observacionFinal,
             });
 
             setLoading(false);
@@ -146,7 +174,8 @@ export default function CajaView({ navigation, route }) {
       </View>
 
       <Text style={styles.subtitle}>
-        Registra con cuánto dinero inicia la caja para dar cambio.
+        Controla la caja del día: monto inicial, ventas en efectivo,
+        transferencias, gastos y efectivo esperado.
       </Text>
 
       {cajaAbierta ? (
@@ -154,8 +183,7 @@ export default function CajaView({ navigation, route }) {
           <Text style={styles.cardTitle}>Caja abierta</Text>
 
           <Text style={styles.infoStrong}>
-            Monto inicial: $
-            {Number(cajaAbierta.monto_inicial || 0).toFixed(2)}
+            Monto inicial: ${formatearDinero(cajaAbierta.monto_inicial)}
           </Text>
 
           <Text style={styles.info}>
@@ -166,11 +194,97 @@ export default function CajaView({ navigation, route }) {
             Fecha apertura: {formatearFecha(cajaAbierta.fecha_apertura)}
           </Text>
 
+          {resumenCaja ? (
+            <View style={styles.summaryBox}>
+              <Text style={styles.summaryTitle}>Resumen de caja</Text>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Caja inicial</Text>
+                <Text style={styles.summaryValue}>
+                  ${formatearDinero(resumenCaja.monto_inicial)}
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Ventas en efectivo</Text>
+                <Text style={styles.summaryValuePositive}>
+                  + ${formatearDinero(resumenCaja.ventas_efectivo)}
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Gastos personales</Text>
+                <Text style={styles.summaryValueNegative}>
+                  - ${formatearDinero(resumenCaja.total_gastos)}
+                </Text>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabelStrong}>
+                  Efectivo esperado
+                </Text>
+                <Text style={styles.summaryValueStrong}>
+                  ${formatearDinero(resumenCaja.efectivo_esperado)}
+                </Text>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Ventas por transferencia</Text>
+                <Text style={styles.summaryValueTransfer}>
+                  ${formatearDinero(resumenCaja.ventas_transferencia)}
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Ingresos totales</Text>
+                <Text style={styles.summaryValue}>
+                  ${formatearDinero(resumenCaja.ventas_totales)}
+                </Text>
+              </View>
+
+              <Text style={styles.noteText}>
+                Las transferencias son ingresos del negocio, pero no se suman al
+                efectivo físico de caja.
+              </Text>
+            </View>
+          ) : null}
+
+          {resumenCaja?.transferencias?.length > 0 ? (
+            <View style={styles.transferBox}>
+              <Text style={styles.summaryTitle}>Transferencias registradas</Text>
+
+              {resumenCaja.transferencias.map((transferencia) => (
+                <View key={transferencia.id} style={styles.transferItem}>
+                  <Text style={styles.transferTitle}>
+                    {transferencia.folio || `Ticket #${transferencia.id}`}
+                  </Text>
+
+                  <Text style={styles.infoStrong}>
+                    Monto: ${formatearDinero(transferencia.total)}
+                  </Text>
+
+                  <Text style={styles.info}>
+                    Fecha pago: {formatearFecha(transferencia.fecha_pago)}
+                  </Text>
+
+                  <Text style={styles.info}>
+                    Comprobante:{" "}
+                    {transferencia.tiene_comprobante ? "Sí" : "No"}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <Text style={styles.label}>Cerrar caja</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Monto final al cerrar caja"
+            placeholder="Monto final físico contado en caja"
             value={montoFinal}
             onChangeText={setMontoFinal}
             keyboardType="numeric"
@@ -191,6 +305,14 @@ export default function CajaView({ navigation, route }) {
             <Text style={styles.buttonText}>
               {loading ? "Procesando..." : "Cerrar caja"}
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={cargarCaja}
+            disabled={loading}
+          >
+            <Text style={styles.refreshButtonText}>Actualizar resumen</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -240,12 +362,12 @@ export default function CajaView({ navigation, route }) {
             </Text>
 
             <Text style={styles.info}>
-              Inicial: ${Number(item.monto_inicial || 0).toFixed(2)}
+              Inicial: ${formatearDinero(item.monto_inicial)}
             </Text>
 
             {item.monto_final !== null && item.monto_final !== undefined && (
               <Text style={styles.info}>
-                Final: ${Number(item.monto_final || 0).toFixed(2)}
+                Final: ${formatearDinero(item.monto_final)}
               </Text>
             )}
 
@@ -370,6 +492,22 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
+  refreshButton: {
+    backgroundColor: "#F7E6C4",
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#E5D3B3",
+  },
+
+  refreshButtonText: {
+    color: "#4A1F0F",
+    textAlign: "center",
+    fontWeight: "800",
+    fontSize: 15,
+  },
+
   disabledButton: {
     opacity: 0.6,
   },
@@ -387,6 +525,109 @@ const styles = StyleSheet.create({
     color: "#4A1F0F",
     marginTop: 8,
     marginBottom: 12,
+  },
+
+  summaryBox: {
+    backgroundColor: "#FFF9F0",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E9D9BF",
+    marginTop: 12,
+    marginBottom: 14,
+  },
+
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#4A1F0F",
+    marginBottom: 10,
+  },
+
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+
+  summaryLabel: {
+    flex: 1,
+    color: "#6E5B4B",
+    fontWeight: "700",
+  },
+
+  summaryLabelStrong: {
+    flex: 1,
+    color: "#4A1F0F",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  summaryValue: {
+    color: "#4A1F0F",
+    fontWeight: "800",
+  },
+
+  summaryValuePositive: {
+    color: "#1E7D32",
+    fontWeight: "900",
+  },
+
+  summaryValueNegative: {
+    color: "#C0392B",
+    fontWeight: "900",
+  },
+
+  summaryValueTransfer: {
+    color: "#2D5BE3",
+    fontWeight: "900",
+  },
+
+  summaryValueStrong: {
+    color: "#1E7D32",
+    fontWeight: "900",
+    fontSize: 17,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#E9D9BF",
+    marginVertical: 6,
+  },
+
+  noteText: {
+    color: "#7A6A59",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
+    fontStyle: "italic",
+  },
+
+  transferBox: {
+    backgroundColor: "#EEF3FF",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#B8C8FF",
+    marginBottom: 14,
+  },
+
+  transferItem: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#D7E0FF",
+    marginBottom: 8,
+  },
+
+  transferTitle: {
+    color: "#2D5BE3",
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 5,
   },
 
   historyCard: {
