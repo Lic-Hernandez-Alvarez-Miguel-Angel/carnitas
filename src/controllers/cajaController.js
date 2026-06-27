@@ -16,6 +16,31 @@ function obtenerMensajeError(error, mensajeDefault) {
 
 /*
 ========================================
+ARMAR QUERY PARAMS
+========================================
+*/
+function armarQueryParams(filtros = {}) {
+  const params = new URLSearchParams();
+
+  if (filtros?.fecha_inicio) {
+    params.append("fecha_inicio", filtros.fecha_inicio);
+  }
+
+  if (filtros?.fecha_fin) {
+    params.append("fecha_fin", filtros.fecha_fin);
+  }
+
+  if (filtros?.punto_venta_id) {
+    params.append("punto_venta_id", filtros.punto_venta_id);
+  }
+
+  const query = params.toString();
+
+  return query ? `?${query}` : "";
+}
+
+/*
+========================================
 OBTENER CAJA ABIERTA
 ========================================
 Trae la caja que esté en estado "abierta".
@@ -40,11 +65,20 @@ export async function obtenerCajaAbierta(puntoVentaId = null) {
 OBTENER HISTORIAL DE CAJA
 ========================================
 Trae las cajas abiertas/cerradas.
+
+Ahora soporta filtros:
+{
+  fecha_inicio: "2026-06-27",
+  fecha_fin: "2026-06-27",
+  punto_venta_id: 1
+}
 ========================================
 */
-export async function obtenerHistorialCaja() {
+export async function obtenerHistorialCaja(filtros = {}) {
   try {
-    const result = await apiGet("/caja");
+    const query = armarQueryParams(filtros);
+
+    const result = await apiGet(`/caja${query}`);
 
     return Array.isArray(result) ? result : [];
   } catch (error) {
@@ -55,9 +89,43 @@ export async function obtenerHistorialCaja() {
 
 /*
 ========================================
+OBTENER DETALLE DE CAJA
+========================================
+Trae el detalle completo de una caja:
+- caja
+- resumen
+- tickets
+- productos vendidos
+- gastos
+========================================
+*/
+export async function obtenerDetalleCaja(cajaId) {
+  try {
+    if (!cajaId) {
+      return {
+        error: "No se encontró la caja.",
+      };
+    }
+
+    return await apiGet(`/caja/${cajaId}/detalle`);
+  } catch (error) {
+    console.log("Error obtenerDetalleCaja:", error);
+
+    return {
+      error: obtenerMensajeError(
+        error,
+        "No se pudo obtener el detalle de la caja."
+      ),
+    };
+  }
+}
+
+/*
+========================================
 ABRIR CAJA
 ========================================
 Registra con cuánto dinero inicia la caja.
+
 Ejemplo:
 {
   usuario_id: 1,
@@ -89,6 +157,7 @@ export async function abrirCaja(data) {
 CERRAR CAJA
 ========================================
 Cierra la caja abierta.
+
 Ejemplo:
 {
   monto_final: 2500,
@@ -99,7 +168,9 @@ Ejemplo:
 export async function cerrarCaja(cajaId, data) {
   try {
     if (!cajaId) {
-      return { error: "No se encontró la caja abierta." };
+      return {
+        error: "No se encontró la caja abierta.",
+      };
     }
 
     return await apiPut(`/caja/${cajaId}/cerrar`, {
@@ -125,6 +196,7 @@ Trae:
 - gastos
 - efectivo esperado
 - ingresos totales
+- diferencia si la caja está cerrada
 ========================================
 */
 export async function obtenerResumenCaja(cajaId = null) {
@@ -163,6 +235,7 @@ export async function obtenerGastosCaja(cajaId) {
 CREAR GASTO DE CAJA
 ========================================
 Registra un gasto personal o gasto de caja.
+
 Ejemplo:
 {
   caja_id: 1,

@@ -16,7 +16,17 @@ export function calcularPrecioTacoCombinado(productosSeleccionados) {
   return Math.max(...precios);
 }
 
-export function calcularImporteItem(producto, modoVenta, cantidad, combinacion = []) {
+export function calcularImporteItem(
+  producto,
+  modoVenta,
+  cantidad,
+  combinacion = [],
+  importeManual = 0
+) {
+  if (modoVenta === "importe") {
+    return Number(importeManual) || 0;
+  }
+
   if (!cantidad) return 0;
 
   if (modoVenta === "taco" && combinacion.length > 0) {
@@ -42,8 +52,14 @@ export function calcularImporteItem(producto, modoVenta, cantidad, combinacion =
   }
 }
 
-export function construirItemTicket(producto, modoVenta, cantidad, combinacion = []) {
-  const cantidadNumero = parseFloat(cantidad) || 0;
+export function construirItemTicket(
+  producto,
+  modoVenta,
+  cantidad,
+  combinacion = [],
+  importeManual = 0
+) {
+  const cantidadNumero = modoVenta === "importe" ? 1 : parseFloat(cantidad) || 0;
 
   let nombreFinal = producto?.nombre || "";
   let categoriaFinal = producto?.categoria || "";
@@ -57,7 +73,8 @@ export function construirItemTicket(producto, modoVenta, cantidad, combinacion =
     producto,
     modoVenta,
     cantidadNumero,
-    combinacion
+    combinacion,
+    importeManual
   );
 
   return {

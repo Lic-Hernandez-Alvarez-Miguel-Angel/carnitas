@@ -34,12 +34,22 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
   const [modoVenta, setModoVenta] = useState("");
   const [cantidad, setCantidad] = useState("1");
+  const [importeManual, setImporteManual] = useState("");
   const [itemsTicket, setItemsTicket] = useState([]);
   const [combinacionTaco, setCombinacionTaco] = useState([]);
   const [categoriaActiva, setCategoriaActiva] = useState("carnitas");
   const [guardando, setGuardando] = useState(false);
 
   const categorias = ["carnitas", "refrescos", "bebidas", "alcohol"];
+
+  const obtenerTextoModoVenta = (modo) => {
+    if (modo === "importe") return "Por importe";
+    return modo;
+  };
+
+  const modosVentaDisponibles = productoSeleccionado
+    ? [...new Set([...(productoSeleccionado.tipoVenta || []), "importe"])]
+    : [];
 
   useEffect(() => {
     cargarDatos();
@@ -91,14 +101,18 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
   const importeActual = useMemo(() => {
     if (!modoVenta) return 0;
 
-   if (modoVenta === "taco" && combinacionTacoFinal.length > 1) {
-  return calcularImporteItem(
-    null,
-    modoVenta,
-    parseFloat(cantidad) || 0,
-    combinacionTacoFinal
-  );
-}
+    if (modoVenta === "importe") {
+      return Number(importeManual) || 0;
+    }
+
+    if (modoVenta === "taco" && combinacionTacoFinal.length > 1) {
+      return calcularImporteItem(
+        null,
+        modoVenta,
+        parseFloat(cantidad) || 0,
+        combinacionTacoFinal
+      );
+    }
 
     if (!productoSeleccionado) return 0;
 
@@ -106,9 +120,16 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
       productoSeleccionado,
       modoVenta,
       parseFloat(cantidad) || 0,
-      []
+      [],
+      importeManual
     );
-}, [productoSeleccionado, modoVenta, cantidad, combinacionTacoFinal]);
+  }, [
+    productoSeleccionado,
+    modoVenta,
+    cantidad,
+    combinacionTacoFinal,
+    importeManual,
+  ]);
 
   const totalTicket = useMemo(() => {
     return calcularTotalTicket(itemsTicket);
@@ -118,19 +139,27 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
     setProductoSeleccionado(null);
     setModoVenta("");
     setCantidad("1");
+    setImporteManual("");
     setCombinacionTaco([]);
   };
 
   const limpiarTicket = () => {
     setItemsTicket([]);
     setMesa("");
-    limpiarSeleccionProducto();
+    setTipoServicio("llevar");
+    setCategoriaActiva("carnitas");
+    setProductoSeleccionado(null);
+    setModoVenta("");
+    setCantidad("1");
+    setImporteManual("");
+    setCombinacionTaco([]);
   };
 
   const handleSeleccionProducto = (producto) => {
     setProductoSeleccionado(producto);
     setModoVenta(producto.tipoVenta?.[0] || "");
     setCantidad("1");
+    setImporteManual("");
     setCombinacionTaco([]);
   };
 
@@ -145,8 +174,34 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
   };
 
   const handleAgregarItem = () => {
+    if (!productoSeleccionado && !(modoVenta === "taco" && combinacionTacoFinal.length > 1)) {
+      Alert.alert("Atención", "Selecciona un producto.");
+      return;
+    }
+
     if (!modoVenta) {
       Alert.alert("Atención", "Selecciona un tipo de venta.");
+      return;
+    }
+
+    if (modoVenta === "importe") {
+      const importe = Number(importeManual);
+
+      if (!importeManual.trim() || Number.isNaN(importe) || importe <= 0) {
+        Alert.alert("Atención", "Ingresa el importe en pesos.");
+        return;
+      }
+
+      const item = construirItemTicket(
+        productoSeleccionado,
+        modoVenta,
+        "1",
+        [],
+        importe
+      );
+
+      setItemsTicket((prev) => [...prev, item]);
+      limpiarSeleccionProducto();
       return;
     }
 
@@ -156,20 +211,15 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
     }
 
     if (modoVenta === "taco" && combinacionTacoFinal.length > 1) {
-  const item = construirItemTicket(
-    null,
-    modoVenta,
-    cantidad,
-    combinacionTacoFinal
-  );
+      const item = construirItemTicket(
+        null,
+        modoVenta,
+        cantidad,
+        combinacionTacoFinal
+      );
 
-  setItemsTicket((prev) => [...prev, item]);
-  limpiarSeleccionProducto();
-  return;
-}
-
-    if (!productoSeleccionado) {
-      Alert.alert("Atención", "Selecciona un producto.");
+      setItemsTicket((prev) => [...prev, item]);
+      limpiarSeleccionProducto();
       return;
     }
 
@@ -207,11 +257,12 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
       setGuardando(true);
 
       if (tipoServicio === "mesa") {
-        const ticketExistente = await buscarTicketPorMesa(mesa.trim());
+        const mesaActual = mesa.trim();
+        const ticketExistente = await buscarTicketPorMesa(mesaActual);
 
         if (ticketExistente) {
           const result = await agregarItemsATicketMesa(
-            mesa.trim(),
+            mesaActual,
             itemsTicket
           );
 
@@ -220,50 +271,58 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
             return;
           }
 
+          limpiarTicket();
+
           Alert.alert(
             "Consumo actualizado",
-            `Se agregó consumo a la mesa ${mesa.trim()}.`
+            `Se agregó consumo a la mesa ${mesaActual}.`
           );
-        } else {
-         const result = await crearTicket({
-  tipoServicio: "mesa",
-  mesa: mesa.trim(),
-  punto_venta_id: zonaAsignada.punto_venta_id,
-  usuario_id: usuarioId,
-  items: itemsTicket,
-});
 
-          if (result?.error) {
-            Alert.alert("Atención", result.error);
-            return;
-          }
-
-          Alert.alert(
-            "Ticket creado",
-            `Se abrió consumo para la mesa ${mesa.trim()} en ${zonaAsignada.punto_venta}.`
-          );
+          return;
         }
-      } else {
+
         const result = await crearTicket({
-  tipoServicio: "llevar",
-  mesa: "",
-  punto_venta_id: zonaAsignada.punto_venta_id,
-  usuario_id: usuarioId,
-  items: itemsTicket,
-});
+          tipoServicio: "mesa",
+          mesa: mesaActual,
+          punto_venta_id: zonaAsignada.punto_venta_id,
+          usuario_id: usuarioId,
+          items: itemsTicket,
+        });
 
         if (result?.error) {
           Alert.alert("Atención", result.error);
           return;
         }
 
+        limpiarTicket();
+
         Alert.alert(
-          "Ticket guardado",
-          `La venta para llevar fue registrada en ${zonaAsignada.punto_venta}.`
+          "Ticket creado",
+          `Se abrió consumo para la mesa ${mesaActual} en ${zonaAsignada.punto_venta}.`
         );
+
+        return;
+      }
+
+      const result = await crearTicket({
+        tipoServicio: "llevar",
+        mesa: "",
+        punto_venta_id: zonaAsignada.punto_venta_id,
+        usuario_id: usuarioId,
+        items: itemsTicket,
+      });
+
+      if (result?.error) {
+        Alert.alert("Atención", result.error);
+        return;
       }
 
       limpiarTicket();
+
+      Alert.alert(
+        "Ticket guardado",
+        `La venta para llevar fue registrada en ${zonaAsignada.punto_venta}.`
+      );
     } catch (error) {
       console.log("Error guardando ticket:", error);
       Alert.alert("Error", "No se pudo guardar el ticket.");
@@ -423,14 +482,19 @@ const handleVerTickets = () => {
             <Text style={styles.label}>Modo de venta</Text>
 
             <View style={styles.rowWrap}>
-              {productoSeleccionado.tipoVenta?.map((modo) => (
+              {modosVentaDisponibles.map((modo) => (
                 <TouchableOpacity
                   key={modo}
                   style={[
                     styles.chip,
                     modoVenta === modo && styles.chipActiveDark,
                   ]}
-                  onPress={() => setModoVenta(modo)}
+                  onPress={() => {
+                    setModoVenta(modo);
+                    if (modo !== "importe") {
+                      setImporteManual("");
+                    }
+                  }}
                 >
                   <Text
                     style={[
@@ -438,7 +502,7 @@ const handleVerTickets = () => {
                       modoVenta === modo && styles.chipTextActive,
                     ]}
                   >
-                    {modo}
+                    {obtenerTextoModoVenta(modo)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -482,15 +546,36 @@ const handleVerTickets = () => {
           </>
         )}
 
-        <Text style={styles.label}>Cantidad</Text>
+        {modoVenta === "importe" ? (
+          <>
+            <Text style={styles.label}>Importe en pesos</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Ingresa cantidad"
-          value={cantidad}
-          onChangeText={setCantidad}
-          keyboardType="numeric"
-        />
+            <TextInput
+              style={styles.input}
+              placeholder="Ej. 122"
+              value={importeManual}
+              onChangeText={setImporteManual}
+              keyboardType="numeric"
+            />
+
+            <Text style={styles.helpText}>
+              Usa esta opción cuando vendas una cantidad libre de carne, por
+              ejemplo $122 de carnitas.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Cantidad</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Ingresa cantidad"
+              value={cantidad}
+              onChangeText={setCantidad}
+              keyboardType="numeric"
+            />
+          </>
+        )}
 
         <View style={styles.previewBox}>
           <Text style={styles.previewTitle}>Producto seleccionado</Text>
@@ -502,8 +587,17 @@ const handleVerTickets = () => {
   : productoSeleccionado?.nombre || "-"}
           </Text>
 
-          <Text style={styles.previewText}>Modo: {modoVenta || "-"}</Text>
-          <Text style={styles.previewText}>Cantidad: {cantidad}</Text>
+          <Text style={styles.previewText}>
+            Modo: {modoVenta ? obtenerTextoModoVenta(modoVenta) : "-"}
+          </Text>
+
+          {modoVenta === "importe" ? (
+            <Text style={styles.previewText}>
+              Importe manual: ${Number(importeManual || 0).toFixed(2)}
+            </Text>
+          ) : (
+            <Text style={styles.previewText}>Cantidad: {cantidad}</Text>
+          )}
 
           <Text style={styles.previewPrice}>
             Importe: ${importeActual.toFixed(2)}
@@ -526,7 +620,9 @@ const handleVerTickets = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.ticketItemName}>{item.nombre}</Text>
                 <Text style={styles.ticketItemDetail}>
-                  {item.modoVenta} · {item.cantidad}
+                  {item.modoVenta === "importe"
+                    ? `Por importe · $${item.importe.toFixed(2)}`
+                    : `${obtenerTextoModoVenta(item.modoVenta)} · ${item.cantidad}`}
                 </Text>
               </View>
 
@@ -572,6 +668,13 @@ const styles = StyleSheet.create({
     color: "#7A6A59",
     marginBottom: 20,
     fontSize: 15,
+  },
+  helpText: {
+    color: "#7A6A59",
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+    fontStyle: "italic",
   },
   card: {
     backgroundColor: "#FFF9F0",
