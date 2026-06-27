@@ -65,17 +65,40 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
     (p) => normalizarCategoria(p.categoria) === categoriaActiva
   );
 
+
+  const combinacionTacoFinal = useMemo(() => {
+  if (modoVenta !== "taco") return [];
+
+  const lista = [];
+
+  if (
+    productoSeleccionado &&
+    normalizarCategoria(productoSeleccionado.categoria) === "carnitas"
+  ) {
+    lista.push(productoSeleccionado);
+  }
+
+  combinacionTaco.forEach((producto) => {
+    const yaExiste = lista.some((p) => p.id === producto.id);
+
+    if (!yaExiste) {
+      lista.push(producto);
+    }
+  });
+
+  return lista;
+}, [productoSeleccionado, combinacionTaco, modoVenta]);
   const importeActual = useMemo(() => {
     if (!modoVenta) return 0;
 
-    if (modoVenta === "taco" && combinacionTaco.length > 0) {
-      return calcularImporteItem(
-        null,
-        modoVenta,
-        parseFloat(cantidad) || 0,
-        combinacionTaco
-      );
-    }
+   if (modoVenta === "taco" && combinacionTacoFinal.length > 1) {
+  return calcularImporteItem(
+    null,
+    modoVenta,
+    parseFloat(cantidad) || 0,
+    combinacionTacoFinal
+  );
+}
 
     if (!productoSeleccionado) return 0;
 
@@ -85,7 +108,7 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
       parseFloat(cantidad) || 0,
       []
     );
-  }, [productoSeleccionado, modoVenta, cantidad, combinacionTaco]);
+}, [productoSeleccionado, modoVenta, cantidad, combinacionTacoFinal]);
 
   const totalTicket = useMemo(() => {
     return calcularTotalTicket(itemsTicket);
@@ -132,18 +155,18 @@ const usuarioId = usuario?.id || route?.params?.usuarioId || null;
       return;
     }
 
-    if (modoVenta === "taco" && combinacionTaco.length > 0) {
-      const item = construirItemTicket(
-        null,
-        modoVenta,
-        cantidad,
-        combinacionTaco
-      );
+    if (modoVenta === "taco" && combinacionTacoFinal.length > 1) {
+  const item = construirItemTicket(
+    null,
+    modoVenta,
+    cantidad,
+    combinacionTacoFinal
+  );
 
-      setItemsTicket((prev) => [...prev, item]);
-      limpiarSeleccionProducto();
-      return;
-    }
+  setItemsTicket((prev) => [...prev, item]);
+  limpiarSeleccionProducto();
+  return;
+}
 
     if (!productoSeleccionado) {
       Alert.alert("Atención", "Selecciona un producto.");
@@ -431,15 +454,18 @@ const handleVerTickets = () => {
               {productos
                 .filter((p) => normalizarCategoria(p.categoria) === "carnitas")
                 .map((producto) => {
-                  const activo = combinacionTaco.some(
-                    (p) => p.id === producto.id
-                  );
+                  const activo =
+  productoSeleccionado?.id === producto.id ||
+  combinacionTaco.some((p) => p.id === producto.id);
 
                   return (
                     <TouchableOpacity
                       key={producto.id}
                       style={[styles.chip, activo && styles.chipActiveDark]}
-                      onPress={() => toggleCombinacion(producto)}
+                     onPress={() => {
+  if (productoSeleccionado?.id === producto.id) return;
+  toggleCombinacion(producto);
+}}
                     >
                       <Text
                         style={[
@@ -471,9 +497,9 @@ const handleVerTickets = () => {
 
           <Text style={styles.previewText}>
             Nombre:{" "}
-            {modoVenta === "taco" && combinacionTaco.length > 0
-              ? combinacionTaco.map((p) => p.nombre).join(" + ")
-              : productoSeleccionado?.nombre || "-"}
+         {modoVenta === "taco" && combinacionTacoFinal.length > 1
+  ? combinacionTacoFinal.map((p) => p.nombre).join(" + ")
+  : productoSeleccionado?.nombre || "-"}
           </Text>
 
           <Text style={styles.previewText}>Modo: {modoVenta || "-"}</Text>
