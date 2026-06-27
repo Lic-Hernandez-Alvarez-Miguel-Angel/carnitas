@@ -2,6 +2,20 @@ import { apiGet, apiPost, apiPut } from "../services/api";
 
 /*
 ========================================
+OBTENER MENSAJE DE ERROR
+========================================
+*/
+function obtenerMensajeError(error, mensajeDefault) {
+  return (
+    error?.message ||
+    error?.response?.data?.error ||
+    error?.response?.data?.mensaje ||
+    mensajeDefault
+  );
+}
+
+/*
+========================================
 OBTENER CAJA ABIERTA
 ========================================
 Trae la caja que esté en estado "abierta".
@@ -63,10 +77,9 @@ export async function abrirCaja(data) {
     });
   } catch (error) {
     console.log("Error abrirCaja:", error);
+
     return {
-      error:
-        error?.response?.data?.error ||
-        "No se pudo abrir la caja.",
+      error: obtenerMensajeError(error, "No se pudo abrir la caja."),
     };
   }
 }
@@ -95,20 +108,29 @@ export async function cerrarCaja(cajaId, data) {
     });
   } catch (error) {
     console.log("Error cerrarCaja:", error);
+
     return {
-      error:
-        error?.response?.data?.error ||
-        "No se pudo cerrar la caja.",
+      error: obtenerMensajeError(error, "No se pudo cerrar la caja."),
     };
   }
-  /*
+}
+
+/*
 ========================================
 OBTENER RESUMEN DE CAJA
+========================================
+Trae:
+- ventas en efectivo
+- ventas por transferencia
+- gastos
+- efectivo esperado
+- ingresos totales
 ========================================
 */
 export async function obtenerResumenCaja(cajaId = null) {
   try {
     const query = cajaId ? `?caja_id=${cajaId}` : "";
+
     return await apiGet(`/caja/resumen${query}`);
   } catch (error) {
     console.log("Error obtenerResumenCaja:", error);
@@ -120,11 +142,15 @@ export async function obtenerResumenCaja(cajaId = null) {
 ========================================
 OBTENER GASTOS DE CAJA
 ========================================
+Trae los gastos registrados en una caja.
+========================================
 */
 export async function obtenerGastosCaja(cajaId) {
   try {
     if (!cajaId) return [];
+
     const result = await apiGet(`/caja/gastos?caja_id=${cajaId}`);
+
     return Array.isArray(result) ? result : [];
   } catch (error) {
     console.log("Error obtenerGastosCaja:", error);
@@ -135,6 +161,17 @@ export async function obtenerGastosCaja(cajaId) {
 /*
 ========================================
 CREAR GASTO DE CAJA
+========================================
+Registra un gasto personal o gasto de caja.
+Ejemplo:
+{
+  caja_id: 1,
+  usuario_id: 1,
+  concepto: "Comida",
+  categoria: "personal",
+  monto: 150,
+  observaciones: "Gasto personal"
+}
 ========================================
 */
 export async function crearGastoCaja(data) {
@@ -151,11 +188,7 @@ export async function crearGastoCaja(data) {
     console.log("Error crearGastoCaja:", error);
 
     return {
-      error:
-        error?.message ||
-        error?.response?.data?.error ||
-        "No se pudo registrar el gasto.",
+      error: obtenerMensajeError(error, "No se pudo registrar el gasto."),
     };
   }
-}
 }
